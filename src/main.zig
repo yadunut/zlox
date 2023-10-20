@@ -23,7 +23,10 @@ pub fn main() !void {
     try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
     try c.writeChunk(OpCode.RETURN, 123);
 
-    try c.disassemble(allocator);
+    var res = vm.interpret(c);
+    res = vm.run();
+
+    // try c.disassemble(allocator);
 }
 
 test "simple test" {

@@ -24,7 +24,7 @@ pub const Value = union(enum) {
         return switch (self) {
             .Float => |v| std.fmt.allocPrint(alloc, "{d:.2}", .{v}),
             .Integer => |v| std.fmt.allocPrint(alloc, "{d}", .{v}),
-            else => "",
+            // else => "",
         };
     }
 };
@@ -59,7 +59,7 @@ pub const Chunk = struct {
     }
 
     pub fn getConst(self: *Chunk, idx: usize) Value {
-        return self.values.items.get[idx];
+        return self.values.items[idx];
     }
 
     pub fn disassemble(self: Chunk, alloc: std.mem.Allocator) !void {
