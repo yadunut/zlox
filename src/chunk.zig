@@ -1,24 +1,36 @@
 const std = @import("std");
 
+const Error = @import("./constants.zig").Error;
+
 const log = std.log.scoped(.chunk);
 
 pub const OpCode = union(enum) {
     CONSTANT: usize,
     RETURN,
+    NEGATE,
+    ADD,
+    SUBTRACT,
+    MULTIPLY,
+    DIVIDE,
     NIL,
 
     pub fn toString(self: OpCode, alloc: std.mem.Allocator) ![]u8 {
         return switch (self) {
             .CONSTANT => |i| std.fmt.allocPrint(alloc, "{s: <16}{d: >4}", .{ "CONSTANT", i }),
             .RETURN => std.fmt.allocPrint(alloc, "{s: <16}", .{"RETURN"}),
-            else => "",
+            .NEGATE => std.fmt.allocPrint(alloc, "{s: <16}", .{"NEGATE"}),
+            .ADD => std.fmt.allocPrint(alloc, "{s: <16}", .{"NEGATE"}),
+            .SUBTRACT => std.fmt.allocPrint(alloc, "{s: <16}", .{"SUBTRACT"}),
+            .MULTIPLY => std.fmt.allocPrint(alloc, "{s: <16}", .{"MULTIPLY"}),
+            .DIVIDE => std.fmt.allocPrint(alloc, "{s: <16}", .{"DIVIDE"}),
+            else => Error.UnhandledOpCode,
         };
     }
 };
 
 pub const Value = union(enum) {
     Float: f32,
-    Integer: u32,
+    Integer: i32,
 
     pub fn toString(self: Value, alloc: std.mem.Allocator) ![]u8 {
         return switch (self) {
@@ -26,6 +38,9 @@ pub const Value = union(enum) {
             .Integer => |v| std.fmt.allocPrint(alloc, "{d}", .{v}),
             // else => "",
         };
+    }
+    pub fn deinit(self: Value) void {
+        _ = self;
     }
 };
 
@@ -63,14 +78,17 @@ pub const Chunk = struct {
     }
 
     pub fn disassemble(self: Chunk, alloc: std.mem.Allocator) !void {
-        for (self.lines.items, 0..) |line, index| {
-            const idxStr = try std.fmt.allocPrint(alloc, "{X:0>4}  ", .{index});
-            defer alloc.free(idxStr);
-            const lineStr = if (index > 0 and self.lines.items[index] == self.lines.items[index - 1]) try std.fmt.allocPrint(alloc, "   |  ", .{}) else try std.fmt.allocPrint(alloc, "{d: >4}  ", .{line});
-            defer alloc.free(lineStr);
-            const instr = try self.codes.items[index].toString(alloc);
-            defer alloc.free(instr);
-            log.debug("{s}{s}{s}", .{ idxStr, lineStr, instr });
+        for (0..self.lines.items.len - 1) |index| {
+            disassembleInstr(self, alloc, index);
         }
+    }
+    pub fn disassembleInstr(self: Chunk, alloc: std.mem.Allocator, index: usize) !void {
+        const idxStr = try std.fmt.allocPrint(alloc, "{X:0>4}  ", .{index});
+        defer alloc.free(idxStr);
+        const lineStr = if (index > 0 and self.lines.items[index] == self.lines.items[index - 1]) try std.fmt.allocPrint(alloc, "   |  ", .{}) else try std.fmt.allocPrint(alloc, "{d: >4}  ", .{self.lines.items[index]});
+        defer alloc.free(lineStr);
+        const instr = try self.codes.items[index].toString(alloc);
+        defer alloc.free(instr);
+        log.debug("{s}{s}{s}", .{ idxStr, lineStr, instr });
     }
 };

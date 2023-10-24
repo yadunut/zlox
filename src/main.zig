@@ -19,12 +19,24 @@ pub fn main() !void {
     var vm = VM.init(allocator);
     defer vm.deinit();
 
-    const constant = try c.addConst(Value{ .Float = 1.2 });
+    var constant = try c.addConst(Value{ .Float = 1.2 });
     try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
+
+    constant = try c.addConst(Value{ .Float = 3.4 });
+    try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
+
+    try c.writeChunk(OpCode.ADD, 123);
+
+    constant = try c.addConst(Value{ .Float = 5.6 });
+    try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
+
+    try c.writeChunk(OpCode.DIVIDE, 123);
+    try c.writeChunk(OpCode.NEGATE, 123);
+
     try c.writeChunk(OpCode.RETURN, 123);
 
     var res = vm.interpret(c);
-    res = vm.run();
+    res = try vm.run();
 
     // try c.disassemble(allocator);
 }
