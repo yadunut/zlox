@@ -1,49 +1,27 @@
 const std = @import("std");
-
 const Chunk = @import("./chunk.zig").Chunk;
-const Value = @import("./chunk.zig").Value;
-const OpCode = @import("./chunk.zig").OpCode;
 const VM = @import("./vm.zig").VM;
+const Value = @import("./value.zig").Value;
+const OpCode = @import("./chunk.zig").OpCode;
+const disassembleChunk = @import("./debug.zig").disassembleChunk;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer std.debug.assert(gpa.deinit() == .ok);
     const allocator = gpa.allocator();
-    defer {
-        const deinit_status = gpa.deinit();
-        if (deinit_status == .leak) @panic("TEST FAIL");
-    }
 
-    var c = Chunk.init(allocator);
-    defer c.deinit();
-
-    var vm = VM.init(allocator);
+    var vm = VM.init();
     defer vm.deinit();
 
-    var constant = try c.addConst(Value{ .Float = 1.2 });
-    try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
+    var chunk = Chunk.init(allocator);
+    defer chunk.deinit();
+    try chunk.writeConstant(Value{ .Number = 1.2 }, 123);
+    try chunk.writeConstant(Value{ .Number = -2.5 }, 123);
 
-    constant = try c.addConst(Value{ .Float = 3.4 });
-    try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
+    try chunk.writeCode(OpCode.OP_NEGATE, 123);
+    try chunk.writeCode(OpCode.OP_ADD, 123);
 
-    try c.writeChunk(OpCode.ADD, 123);
+    try chunk.writeCode(OpCode.OP_RETURN, 124);
 
-    constant = try c.addConst(Value{ .Float = 5.6 });
-    try c.writeChunk(OpCode{ .CONSTANT = constant }, 123);
-
-    try c.writeChunk(OpCode.DIVIDE, 123);
-    try c.writeChunk(OpCode.NEGATE, 123);
-
-    try c.writeChunk(OpCode.RETURN, 123);
-
-    var res = vm.interpret(c);
-    res = try vm.run();
-
-    // try c.disassemble(allocator);
-}
-
-test "simple test" {
-    var c = Chunk.init(std.testing.allocator);
-    defer c.deinit();
-
-    try std.testing.expectEqual(OpCode.RETURN, c.codes.items[0]);
+    try vm.interpret(&chunk);
 }

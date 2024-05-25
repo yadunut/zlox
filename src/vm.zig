@@ -1,142 +1,104 @@
 const std = @import("std");
-
 const Chunk = @import("./chunk.zig").Chunk;
-const Value = @import("./chunk.zig").Value;
 const OpCode = @import("./chunk.zig").OpCode;
+const Value = @import("./value.zig").Value;
+const disassembleInstruction = @import("./debug.zig").disassembleInstruction;
+const debugStack = @import("./debug.zig").debugStack;
 
-const InterpretResult = enum {
-    OK,
-    COMPILE_ERROR,
-    RUNTIME_ERROR,
+const STACK_SIZE = 256;
+
+const InterpretError = error{
+    CompileError,
+    RuntimeError,
 };
 
-const log = std.log.scoped(.vm);
-
 pub const VM = struct {
-    allocator: std.mem.Allocator,
-    chunk: ?Chunk,
-    ip: usize,
-    stack: std.ArrayList(Value),
-    pub fn init(allocator: std.mem.Allocator) VM {
-        log.debug("initialized VM", .{});
-        return VM{
-            .allocator = allocator,
-            .chunk = null,
-            .stack = std.ArrayList(Value).init(allocator),
-            .ip = 0,
-        };
+    chunk: ?*Chunk = null,
+    stack: [STACK_SIZE]?Value = [_]?Value{null} ** STACK_SIZE,
+    ip: usize = 0,
+    sp: usize = 0, // points to the next available hole
+
+    pub fn init() VM {
+        return VM{};
     }
-    pub fn deinit(self: *VM) void {
-        for (self.stack.items) |item| item.deinit();
-        self.stack.deinit();
-    }
-    pub fn interpret(self: *VM, chunk: Chunk) InterpretResult {
+    pub fn deinit(_: *VM) void {}
+    pub fn interpret(self: *VM, chunk: *Chunk) InterpretError!void {
         self.chunk = chunk;
         self.ip = 0;
-        return InterpretResult.OK;
+        return self.run();
     }
 
-    pub fn debugStack(self: VM) !void {
-        var strings = std.ArrayList(u8).init(self.allocator);
-        try strings.appendSlice("Stack [ ");
-        for (self.stack.items) |item| {
-            const res = try item.toString(self.allocator);
-            defer self.allocator.free(res);
-            try strings.appendSlice(res);
-            try strings.append(' ');
-        }
-        try strings.appendSlice("]");
-        std.log.scoped(.stack).info("{s}", .{strings.items});
-        strings.deinit();
+    fn readConstant(self: *VM) Value {
+        self.ip += 1;
+        const idx = self.chunk.?.codes.items[self.ip];
+        return self.chunk.?.values.items[idx];
     }
 
-    pub fn run(self: *VM) !InterpretResult {
-        // might want to rewrite this to an iterator
-        if (self.chunk == null) return InterpretResult.RUNTIME_ERROR;
-        while (true) {
-            const instr = self.chunk.?.codes.items[self.ip];
-            try self.debugStack();
-            try self.chunk.?.disassembleInstr(self.allocator, self.ip);
-            switch (instr) {
-                .CONSTANT => |i| {
-                    const c = self.chunk.?.getConst(i);
-                    self.stack.append(c) catch return InterpretResult.RUNTIME_ERROR;
-                    // const res = c.toString(self.allocator) catch return InterpretResult.RUNTIME_ERROR;
-                    // log.info("{s}", .{res});
-                    // defer self.allocator.free(res);
+    fn push(self: *VM, value: Value) void {
+        self.stack[self.sp] = value;
+        self.sp += 1;
+    }
+    fn pop(self: *VM) Value {
+        self.sp -= 1;
+        return self.stack[self.sp].?;
+    }
+
+    fn run(self: *VM) InterpretError!void {
+        if (self.chunk == null) return InterpretError.CompileError;
+        while (self.ip < self.chunk.?.codes.items.len) : (self.ip += 1) {
+            _ = debugStack(&self.stack, self.sp);
+            _ = disassembleInstruction(self.chunk.?, self.ip);
+            const instruction: OpCode = @enumFromInt(self.chunk.?.codes.items[self.ip]);
+            switch (instruction) {
+                .OP_RETURN => return,
+                .OP_CONSTANT => {
+                    const constant = self.readConstant();
+                    self.push(constant);
                 },
-                .RETURN => {
-                    const c = self.stack.pop();
-                    const res = try c.toString(self.allocator);
-                    log.info("{s}", .{res});
-                    defer self.allocator.free(res);
-                    return InterpretResult.OK;
+                .OP_NEGATE => {
+                    const constant = self.pop();
+                    switch (constant) {
+                        .Number => |num| self.push(.{ .Number = -num }),
+                    }
                 },
-                .NEGATE => {
-                    try self.stack.append(switch (self.stack.pop()) {
-                        .Integer => |i| Value{ .Integer = -i },
-                        .Float => |f| Value{ .Float = -f },
-                    });
+                .OP_ADD => {
+                    const op2 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    const op1 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    self.push(.{ .Number = op2 + op1 });
                 },
-                .ADD => {
-                    const b = self.stack.pop();
-                    const a = self.stack.pop();
-                    try self.stack.append(switch (a) {
-                        .Integer => |i| switch (b) {
-                            .Integer => |j| Value{ .Integer = i + j },
-                            .Float => |f| Value{ .Float = f + @as(f32, @floatFromInt(i)) },
-                        },
-                        .Float => |f| switch (b) {
-                            .Integer => |j| Value{ .Float = f + @as(f32, @floatFromInt(j)) },
-                            .Float => |g| Value{ .Float = f + g },
-                        },
-                    });
+                .OP_SUB => {
+                    const op2 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    const op1 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    self.push(.{ .Number = op2 - op1 });
                 },
-                .SUBTRACT => {
-                    const b = self.stack.pop();
-                    const a = self.stack.pop();
-                    try self.stack.append(switch (a) {
-                        .Integer => |i| switch (b) {
-                            .Integer => |j| Value{ .Integer = i - j },
-                            .Float => |f| Value{ .Float = f - @as(f32, @floatFromInt(i)) },
-                        },
-                        .Float => |f| switch (b) {
-                            .Integer => |j| Value{ .Float = f - @as(f32, @floatFromInt(j)) },
-                            .Float => |g| Value{ .Float = f - g },
-                        },
-                    });
+                .OP_MUL => {
+                    const op2 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    const op1 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    self.push(.{ .Number = op2 * op1 });
                 },
-                .MULTIPLY => {
-                    const b = self.stack.pop();
-                    const a = self.stack.pop();
-                    try self.stack.append(switch (a) {
-                        .Integer => |i| switch (b) {
-                            .Integer => |j| Value{ .Integer = i * j },
-                            .Float => |f| Value{ .Float = f * @as(f32, @floatFromInt(i)) },
-                        },
-                        .Float => |f| switch (b) {
-                            .Integer => |j| Value{ .Float = f * @as(f32, @floatFromInt(j)) },
-                            .Float => |g| Value{ .Float = f * g },
-                        },
-                    });
+                .OP_DIV => {
+                    const op2 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    const op1 = switch (self.pop()) {
+                        .Number => |num| num,
+                    };
+                    self.push(.{ .Number = op2 / op1 });
                 },
-                .DIVIDE => {
-                    const b = self.stack.pop();
-                    const a = self.stack.pop();
-                    try self.stack.append(switch (a) {
-                        .Integer => |i| switch (b) {
-                            .Integer => |j| Value{ .Float = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(j)) },
-                            .Float => |f| Value{ .Float = f / @as(f32, @floatFromInt(i)) },
-                        },
-                        .Float => |f| switch (b) {
-                            .Integer => |j| Value{ .Float = f / @as(f32, @floatFromInt(j)) },
-                            .Float => |g| Value{ .Float = f / g },
-                        },
-                    });
-                },
-                else => return InterpretResult.RUNTIME_ERROR,
+                else => {},
             }
-            self.ip += 1;
         }
     }
 };
