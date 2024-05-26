@@ -38,9 +38,16 @@ pub const VM = struct {
         self.stack[self.sp] = value;
         self.sp += 1;
     }
+    fn peek(self: *VM) Value {
+        return self.stack[self.sp - 1].?;
+    }
     fn pop(self: *VM) Value {
         self.sp -= 1;
         return self.stack[self.sp].?;
+    }
+
+    fn updateHead(self: *VM, comptime update: fn (old: Value) Value) void {
+        self.stack[self.sp - 1] = update(self.stack[self.sp - 1].?);
     }
 
     fn run(self: *VM) InterpretError!void {
@@ -56,10 +63,7 @@ pub const VM = struct {
                     self.push(constant);
                 },
                 .OP_NEGATE => {
-                    const constant = self.pop();
-                    switch (constant) {
-                        .Number => |num| self.push(.{ .Number = -num }),
-                    }
+                    self.updateHead(negate);
                 },
                 .OP_ADD => {
                     const op2 = switch (self.pop()) {
@@ -102,3 +106,9 @@ pub const VM = struct {
         }
     }
 };
+
+fn negate(old: Value) Value {
+    switch (old) {
+        .Number => |num| return .{ .Number = -num },
+    }
+}
