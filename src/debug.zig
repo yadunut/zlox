@@ -50,7 +50,7 @@ fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
 test "print chunk" {
     var c = Chunk.init(std.testing.allocator);
     defer c.deinit();
-    try c.writeCode(OpCode.OP_RETURN);
+    try c.writeCode(OpCode.OP_RETURN, 1);
     disassembleChunk(&c, "test");
 }
 

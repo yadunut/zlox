@@ -3,4 +3,5 @@ comptime {
     _ = @import("./debug.zig");
     _ = @import("./value.zig");
     _ = @import("./vm.zig");
+    _ = @import("./scanner.zig");
 }

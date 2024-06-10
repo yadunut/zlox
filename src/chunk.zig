@@ -54,6 +54,6 @@ pub const Chunk = struct {
 
 test "detect leaks" {
     var chunk = Chunk.init(std.testing.allocator);
-    try chunk.write(@intFromEnum(OpCode.OP_RETURN));
+    try chunk.write(@intFromEnum(OpCode.OP_RETURN), 0);
     chunk.deinit();
 }

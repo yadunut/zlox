@@ -6,22 +6,31 @@ const OpCode = @import("./chunk.zig").OpCode;
 const disassembleChunk = @import("./debug.zig").disassembleChunk;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer std.debug.assert(gpa.deinit() == .ok);
-    const allocator = gpa.allocator();
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // defer std.debug.assert(gpa.deinit() == .ok);
+    // const allocator = gpa.allocator();
 
     var vm = VM.init();
     defer vm.deinit();
 
-    var chunk = Chunk.init(allocator);
-    defer chunk.deinit();
-    try chunk.writeConstant(Value{ .Number = 1.2 }, 123);
-    try chunk.writeConstant(Value{ .Number = -2.5 }, 123);
+    return repl(&vm);
+}
 
-    try chunk.writeCode(OpCode.OP_NEGATE, 123);
-    try chunk.writeCode(OpCode.OP_ADD, 123);
+fn repl(vm: *VM) !void {
+    const stdin = std.io.getStdIn().reader();
+    const stdout = std.io.getStdOut().writer();
 
-    try chunk.writeCode(OpCode.OP_RETURN, 124);
+    var line: [1024]u8 = undefined;
 
-    try vm.interpret(&chunk);
+    while (true) {
+        try stdout.print("> ", .{});
+        _ = stdin.readUntilDelimiter(&line, '\n') catch |err| {
+            if (err != error.EndOfStream) {
+                return err;
+            }
+            try stdout.print("\n", .{});
+            break;
+        };
+        try vm.interpret(&line);
+    }
 }

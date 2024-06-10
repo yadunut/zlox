@@ -4,6 +4,7 @@ const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
 const disassembleInstruction = @import("./debug.zig").disassembleInstruction;
 const debugStack = @import("./debug.zig").debugStack;
+const compile = @import("./compiler.zig").compile;
 
 const STACK_SIZE = 256;
 
@@ -22,10 +23,9 @@ pub const VM = struct {
         return VM{};
     }
     pub fn deinit(_: *VM) void {}
-    pub fn interpret(self: *VM, chunk: *Chunk) InterpretError!void {
-        self.chunk = chunk;
-        self.ip = 0;
-        return self.run();
+    pub fn interpret(self: *VM, source: []u8) InterpretError!void {
+        _ = self;
+        try compile(source);
     }
 
     fn readConstant(self: *VM) Value {
